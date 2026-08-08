@@ -1,0 +1,14 @@
+{
+  "DOMINO_AX_1": {
+    "ip": "192.168.1.50",
+    "port": 7000,
+    "protocol": "domino_ax_codenet",
+    "default_label_slot": "001",
+    "default_product_detect": "1",
+    "enabled": true,
+    "label_map": {
+      "SKU001": "001",
+      "SKU002": "002"
+    }
+  }
+}
