@@ -3,27 +3,32 @@ setlocal
 set "ROOT_DIR=%~dp0"
 cd /d "%ROOT_DIR%"
 
+:: Self-elevate to Administrator (one click)
+net session >nul 2>&1
+if errorlevel 1 (
+  echo Requesting Administrator privileges...
+  powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "Start-Process -FilePath '%~f0' -ArgumentList '%*' -Verb RunAs -WorkingDirectory '%ROOT_DIR%'"
+  exit /b
+)
+
 echo.
 echo ============================================================
 echo   Domino Printer Middleware - One-Click Install
 echo ============================================================
 echo.
-echo   IMPORTANT:
-echo   - Right-click install.bat -^> Run as administrator
-echo     OR run from an Administrator Command Prompt
-echo.
 echo   This will:
 echo     1. Install Python 3.11 via winget if missing
 echo     2. Create .venv and pip install requirements
-echo     3. Create config\printers.json from example if missing
+echo     3. Create config files from examples if missing
 echo     4. Install DominoPrinterMiddleware Windows service
 echo        (auto-start on boot + restart on crash)
-echo     5. Verify http://127.0.0.1:5003/health
+echo     5. Install Cloudflare tunnel service when possible
+echo        -^> https://domino-print.k95foods.com
+echo     6. Verify local (and public) /health
 echo.
-echo   Optional public URL later:
-echo     install.bat -WithCloudflare
-echo.
-echo   Full guide: INSTALL_GUIDE.md
+echo   LAN only:  install.bat -SkipCloudflare
+echo   Guide:     INSTALL_GUIDE.md
 echo.
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT_DIR%scripts\install-windows.ps1" %*

@@ -9,11 +9,14 @@ Independent from the Rynan `printer-middleware` — use a separate URL/port for 
 | Suggested public URL | `https://domino-print.k95foods.com` |
 | Printer protocol | Codenet bytes over TCP **7000** |
 
-## Quick start (Windows site PC)
+## Quick start (Windows site PC) — one click
 
-**Right-click** [`install.bat`](install.bat) → **Run as administrator**
+1. Clone or unzip this repo  
+2. **Double-click** [`install.bat`](install.bat) (accepts UAC)
 
-That installs Python (if needed), `.venv`, and Windows service **`DominoPrinterMiddleware`** on port **5003**.
+That installs Python if needed, `.venv`, Windows service **`DominoPrinterMiddleware`** (boot + crash restart), and **Cloudflare** tunnel service **`DominoCloudflared`** when possible → **`https://domino-print.k95foods.com`**.
+
+LAN only: `install.bat -SkipCloudflare`
 
 Full steps: [INSTALL_GUIDE.md](INSTALL_GUIDE.md) · Linux: [LINUX_INSTALL.md](LINUX_INSTALL.md)
 

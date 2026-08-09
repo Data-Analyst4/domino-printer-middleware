@@ -2,6 +2,8 @@
 __pycache__/
 *.pyc
 logs/
+install.log
+
 data/
 config/site.env
 config/app.env
