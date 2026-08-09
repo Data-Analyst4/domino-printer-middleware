@@ -81,10 +81,25 @@ See **[ERP_INTEGRATION.md](ERP_INTEGRATION.md)** for ERP printer configuration a
 - [docs/DOMINO_AX_FUNCTIONALITY_AND_WEB_APP_GUIDE.md](docs/DOMINO_AX_FUNCTIONALITY_AND_WEB_APP_GUIDE.md)
 - PDFs under `docs/`
 
-## Local mock printer
+## Demo printer (no hardware)
+
+Mimics a successful Domino Ax Codenet printer on TCP **7000** (identify, status, store, print → ACK).
 
 ```powershell
-python scripts\mock_domino_printer.py --port 7000
+# Terminal 1 — demo printer
+.\start-demo-printer.bat
+# or: python scripts\mock_domino_printer.py --host 127.0.0.1 --port 7000
+
+# Point middleware at the demo
+copy config\printers.demo.json config\printers.json
+
+# Terminal 2 — middleware
+python main.py
 ```
 
-Point `printers.json` IP to `127.0.0.1` while testing.
+Then:
+
+```powershell
+curl -X POST http://127.0.0.1:5003/test/connection -H "Content-Type: application/json" -d "{\"ip\":\"127.0.0.1\",\"port\":7000}"
+curl -X POST http://127.0.0.1:5003/print -H "Content-Type: application/json" -d "{\"printer_id\":\"DOMINO_AX_DEMO\",\"action\":\"print_stored_label\",\"label_slot\":\"001\"}"
+```
