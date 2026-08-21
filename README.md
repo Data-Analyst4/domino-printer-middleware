@@ -37,6 +37,8 @@ Health check: `http://127.0.0.1:5003/health`
 
 Full checklist + ping/port/print tests: **[PRINTER_SETUP_AND_TEST.md](PRINTER_SETUP_AND_TEST.md)**
 
+Living study notes from Domino Product + Codenet PDFs, plus all live test results: **[docs/DOMINO_STUDY_AND_TEST_LOG.md](docs/DOMINO_STUDY_AND_TEST_LOG.md)** (updated after each test)
+
 1. `Home > Setup > Printer network > Advanced`
 2. Protocol Setting → **Codenet**
 3. Protocol Mode → **TCP**

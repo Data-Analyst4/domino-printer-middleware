@@ -197,13 +197,18 @@ class DominoPrintService:
 
         command_kwargs = self._command_kwargs(action, cfg, params)
         packet = builder(**command_kwargs)
+        if action != "print_go" and action not in {"print_stored_label", "print_product"}:
+            if codenet.is_print_go_packet(packet):
+                raise RuntimeError(f"Refusing to send Print Go (N) for action={action}")
         step = self._send_step(cfg, action, packet)
-        return {
+        result: Dict[str, Any] = {
             "success": step["ok"],
             "steps": [step],
             "error": None if step["ok"] else step.get("error"),
             "nak_code": step.get("nak_code"),
         }
+        result.update(self._action_extras(action, command_kwargs, step))
+        return result
 
     def _print_product(self, cfg: PrinterConfig, params: Dict[str, Any]) -> Dict[str, Any]:
         product_code = str(params.get("product_code") or params.get("product") or "").strip()
@@ -251,6 +256,11 @@ class DominoPrintService:
             if not slot:
                 raise ValueError("label_slot is required")
             return {"label_slot": slot}
+        if action == "put_named_label_online":
+            name = params.get("label_name") or params.get("label") or params.get("template")
+            if not str(name or "").strip():
+                raise ValueError("label_name is required")
+            return {"label_name": str(name).strip()}
         if action == "print_go":
             return {"product_detect": params.get("product_detect") or cfg.default_product_detect}
         if action == "download_label_without_save":
@@ -261,11 +271,36 @@ class DominoPrintService:
             if not params.get("label_slot") or params.get("label_data") is None:
                 raise ValueError("label_slot and label_data are required")
             return {"label_slot": params["label_slot"], "label_data": str(params["label_data"])}
-        if action == "send_fifo_data":
-            if params.get("data") is None:
-                raise ValueError("data is required")
-            return {"data": str(params["data"])}
+        if action in {"send_fifo_data", "push_fifo_fields"}:
+            return {"data": self._fifo_csv(params)}
         return {}
+
+    @staticmethod
+    def _fifo_csv(params: Dict[str, Any]) -> str:
+        """Build OE ASCII payload. Prefer fields[] (POD order), then csv, then data."""
+        if params.get("fields") is not None:
+            fields = params["fields"]
+            if not isinstance(fields, (list, tuple)):
+                raise ValueError("fields must be an array")
+            return ",".join("" if item is None else str(item) for item in fields)
+        if params.get("csv") is not None:
+            return str(params["csv"])
+        if params.get("data") is not None:
+            return str(params["data"])
+        raise ValueError("fields[], csv, or data is required")
+
+    @staticmethod
+    def _action_extras(action: str, kwargs: Dict[str, Any], step: Dict[str, Any]) -> Dict[str, Any]:
+        extras: Dict[str, Any] = {}
+        if action == "put_named_label_online":
+            extras["label_name"] = kwargs.get("label_name")
+        if action in {"push_fifo_fields", "send_fifo_data"}:
+            extras["csv"] = kwargs.get("data")
+        if action == "query_online_label":
+            ascii_payload = codenet.query_payload_ascii(step.get("query_payload_hex"))
+            extras["query_payload_ascii"] = ascii_payload
+            extras["online_label"] = codenet.online_label_from_query_ascii(ascii_payload)
+        return extras
 
     def _send_step(self, cfg: PrinterConfig, command: str, packet: bytes) -> Dict[str, Any]:
         conn = self._connection(cfg)

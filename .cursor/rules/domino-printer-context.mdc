@@ -1,0 +1,53 @@
+---
+description: Domino Ax printer live context — IP, Codenet commands, FIFO, stop/resume, sequence on/off
+alwaysApply: true
+---
+
+# Domino Ax printer — project memory
+
+## Site
+
+- Printer: `192.168.1.40:7000` (Codenet TCP). Web UI: `http://192.168.1.40/#/home`
+- Middleware: `http://127.0.0.1:5003`, printer_id `DOMINO_AX_1`
+- Active template (named): **`NOICE KM 200ML`** — load with `ON` (ACK). Not numeric slot 001/002.
+- Logs: `docs/DOMINO_STUDY_AND_TEST_LOG.md`, `docs/DOMINO_COMMAND_PROBE_LOG.md`
+
+## Framing
+
+`ESC (1B) + cmd + params + EOT (04)` → ACK `06` or NAK `15`+3 digits. Prefer On Processed + Variable.
+
+## What works on this unit (probed)
+
+| Need | Hex / action |
+|------|----------------|
+| Identify | `1B413F04` |
+| Status Ready | `O1?` → status `001` |
+| Ink/make-up | `y?` → e.g. ink `007`, makeup `006` |
+| Head query/stop/resume | `Q1?` / `Q1N` `1B51314E04` / `Q1Y` `1B51315904` |
+| Continuous | `[?` → OFF on this site |
+| Counts | `T1?` / `T2?` (photocell caveat) |
+| Named label online | `ON` + len + `NOICE KM 200ML` |
+| FIFO data | `OE` + 4-digit len + ASCII CSV |
+| Print once | `N1` `1B4E3104` |
+| Jet sequence on/off | `OS 1` `1B4F533104` / `OS 0` `1B4F533004` / query `OS ?` |
+
+## What fails here (NAK 003)
+
+Codenet-2 `}` commands unrecognised: `}D` (version), `}J` (clear FIFO).  
+NAK `003` = unrecognised command after ESC. Clear FIFO instead via `OE` len `0000`: `1B4F45303030303004`.
+
+## FIFO / batch
+
+- FIFO ~1 deep: send `OE` → print (photocell or `N`) → next. Do not blast 10–300 OE.
+- Limit 200/300 = **host loop** of N paced OE→print cycles.
+- Cannot read FIFO text back; probe with OE or UI “Buffer empty”.
+
+## UI Stop menu vs Codenet
+
+- **Sequence off** ≈ `OS 0`; **Start/Ready** ≈ `OS 1`
+- **Jet running / Phase locked**: UI Stop states; **no SET in Codenet** — only appear in `OS ?` status words (`D807`, `DA07`, etc.)
+- Soft pause prints without sequencing jet off: `Q N` / resume `Q Y`
+
+## Probe rule
+
+One command at a time when user is probing; log sent/received/purpose to `docs/DOMINO_COMMAND_PROBE_LOG.md`.

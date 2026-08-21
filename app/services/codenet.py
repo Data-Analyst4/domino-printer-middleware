@@ -77,6 +77,33 @@ def put_label_online(label_slot: str) -> bytes:
     return _frame(b"P", _slot3(label_slot))
 
 
+def put_named_label_online(label_name: str) -> bytes:
+    """Named label online: ESC ON 1 <len2> <name> EOT (probed ACK on this Ax)."""
+    name = str(label_name).strip()
+    if not name:
+        raise ValueError("label_name is required")
+    encoded = name.encode("ascii", errors="strict")
+    if len(encoded) > 99:
+        raise ValueError("label_name is too long (max 99 ASCII characters)")
+    length = f"{len(encoded):02d}".encode("ascii")
+    return _frame(b"ON", b"1", length, encoded)
+
+
+def query_online_label() -> bytes:
+    """Query currently online label: ESC P 1 ? EOT."""
+    return _frame(b"P", b"1", bytes([QUERY]))
+
+
+def soft_stop() -> bytes:
+    """Head disable (pause prints, jet stays up): ESC Q 1 N EOT."""
+    return _frame(b"Q", b"1", b"N")
+
+
+def soft_resume() -> bytes:
+    """Head enable (allow prints again): ESC Q 1 Y EOT."""
+    return _frame(b"Q", b"1", b"Y")
+
+
 def print_go(product_detect: str = "1") -> bytes:
     detect = str(product_detect).strip() or "1"
     if len(detect) != 1 or not detect.isdigit():
@@ -146,6 +173,29 @@ def parse_response(raw: bytes, *, fixed_ack_mode: bool = False) -> CodenetResult
     )
 
 
+def query_payload_ascii(query_payload_hex: Optional[str]) -> Optional[str]:
+    if not query_payload_hex:
+        return None
+    try:
+        return bytes.fromhex(query_payload_hex).decode("ascii", errors="replace")
+    except ValueError:
+        return None
+
+
+def online_label_from_query_ascii(payload_ascii: Optional[str]) -> Optional[str]:
+    """P1? inner ASCII is `P1` + truncated name/slot (e.g. P1NOI)."""
+    if not payload_ascii:
+        return None
+    if payload_ascii.startswith("P1"):
+        return payload_ascii[2:] or None
+    return payload_ascii
+
+
+def is_print_go_packet(packet: bytes) -> bool:
+    """True only for production Print Go (ESC N … EOT). ON contains 4E as a letter, not this."""
+    return len(packet) >= 3 and packet[0] == ESC and packet[1] == ord("N") and packet[-1] == EOT
+
+
 COMMAND_BUILDERS = {
     "identify": lambda **_: identify(),
     "get_codenet_version": lambda **_: get_codenet_version(),
@@ -153,8 +203,13 @@ COMMAND_BUILDERS = {
     "get_basic_status": lambda **_: get_basic_status(),
     "get_extended_status": lambda **_: get_extended_status(),
     "put_label_online": lambda **kw: put_label_online(kw["label_slot"]),
+    "put_named_label_online": lambda **kw: put_named_label_online(kw["label_name"]),
+    "query_online_label": lambda **_: query_online_label(),
     "print_go": lambda **kw: print_go(kw.get("product_detect", "1")),
     "download_label_without_save": lambda **kw: download_label_without_save(kw["slot"], kw["label_data"]),
     "send_fifo_data": lambda **kw: send_fifo_data(kw["data"]),
+    "push_fifo_fields": lambda **kw: send_fifo_data(kw["data"]),
     "store_label": lambda **kw: store_label(kw["label_slot"], kw["label_data"]),
+    "soft_stop": lambda **_: soft_stop(),
+    "soft_resume": lambda **_: soft_resume(),
 }

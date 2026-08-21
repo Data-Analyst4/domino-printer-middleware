@@ -68,6 +68,21 @@ class DemoPrinterResponseTests(unittest.TestCase):
         self.assertEqual(resp, bytes([0x06]))
         self.assertIn("fifo", summary)
 
+    def test_named_label_online_and_truncated_query(self):
+        put, _ = build_response(b"ON114NOICE KM 200ML", self.state, False)
+        self.assertEqual(put, bytes([0x06]))
+        self.assertEqual(self.state.online_name, "NOICE KM 200ML")
+        query, _ = build_response(b"P1?", self.state, False)
+        self.assertEqual(query, bytes.fromhex("1B50314E4F4904"))  # P1NOI
+
+    def test_soft_stop_and_resume(self):
+        stop, _ = build_response(b"Q1N", self.state, False)
+        self.assertEqual(stop, bytes([0x06]))
+        self.assertFalse(self.state.head_enabled)
+        resume, _ = build_response(b"Q1Y", self.state, False)
+        self.assertEqual(resume, bytes([0x06]))
+        self.assertTrue(self.state.head_enabled)
+
 
 if __name__ == "__main__":
     unittest.main()

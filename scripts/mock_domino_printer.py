@@ -46,7 +46,14 @@ class DemoPrinterState:
             "002": "DEMO_LABEL_002",
         }
     )
+    named_labels: Dict[str, str] = field(
+        default_factory=lambda: {
+            "NOICE KM 200ML": "DEMO_NAMED_NOICE",
+        }
+    )
     online_slot: Optional[str] = "001"
+    online_name: Optional[str] = None
+    head_enabled: bool = True
     print_count: int = 0
     command_count: int = 0
     lock: threading.Lock = field(default_factory=threading.Lock)
@@ -109,6 +116,18 @@ def build_response(
         # O1? — extended status
         if cmd == b"O1":
             return _frame(b"O1" + EXTENDED_STATUS), "extended status -> ready"
+
+        # P1? — currently online label (named labels echo a truncated name, as on the Ax)
+        if cmd == b"P1":
+            with state.lock:
+                source = state.online_name or state.online_slot or ""
+            echo = source[:3].encode("ascii", errors="replace")
+            return _frame(b"P1" + echo), f"query_online_label -> P1{source[:3]!r}"
+
+        # Q1? — head enable (Y) / soft-stopped (N)
+        if cmd == b"Q1":
+            flag = b"Y" if state.head_enabled else b"N"
+            return _frame(b"Q1" + flag), f"head query -> Q1{flag.decode()}"
 
         # Generic query echo (success-shaped)
         return _frame(cmd + b"OK"), f"query {cmd!r} -> OK stub"
@@ -174,6 +193,35 @@ def build_response(
         if len(payload) != expected:
             return _nak("001"), f"fifo -> NAK 001 (len {len(payload)} != {expected})"
         return _ack(fixed_ack), f"send_fifo_data {expected} bytes -> ACK"
+
+    # ON + head + 2-digit length + name — named label online (no Print Go)
+    if body.startswith(b"ON"):
+        if len(body) < 5:
+            return _nak("001"), "put_named_label_online -> NAK 001"
+        if body[2:3] != b"1":
+            return _nak("005"), "put_named_label_online -> NAK 005 (head)"
+        length_text = body[3:5]
+        if not length_text.isdigit():
+            return _nak("007"), "put_named_label_online -> NAK 007"
+        expected = int(length_text)
+        name_bytes = body[5:]
+        if len(name_bytes) != expected:
+            return _nak("001"), "put_named_label_online -> NAK 001 (length)"
+        try:
+            name = name_bytes.decode("ascii")
+        except UnicodeDecodeError:
+            return _nak("013"), "put_named_label_online -> NAK 013"
+        with state.lock:
+            if state.named_labels and name not in state.named_labels:
+                return _nak("016"), f"put_named_label_online {name!r} -> NAK 016"
+            state.online_name = name
+        return _ack(fixed_ack), f"put_named_label_online {name!r} -> ACK"
+
+    # Q1N / Q1Y — soft stop / resume (no Print Go, jet stays up)
+    if body in {b"Q1N", b"Q1Y"}:
+        with state.lock:
+            state.head_enabled = body.endswith(b"Y")
+        return _ack(fixed_ack), f"head {'enable' if body.endswith(b'Y') else 'disable'} -> ACK"
 
     # Unknown command — ACK by default so exploratory demos stay green
     if fail_unknown:

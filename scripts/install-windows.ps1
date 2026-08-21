@@ -1,4 +1,4 @@
-# Domino Printer Middleware — Windows one-click installer
+# Domino Printer Middleware - Windows one-click installer
 # Run via install.bat (self-elevates to Administrator)
 #
 # Default: middleware service + Cloudflare public URL when possible.
@@ -65,8 +65,9 @@ function Read-EnvFile([string]$Path) {
 }
 
 function Find-Python {
+    $pyCmd = Get-Command python -ErrorAction SilentlyContinue
     $candidates = @(
-        (Get-Command python -ErrorAction SilentlyContinue)?.Source,
+        $(if ($pyCmd) { $pyCmd.Source } else { $null }),
         "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
         "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
         "C:\Program Files\Python311\python.exe",
@@ -123,7 +124,7 @@ function Ensure-ConfigFiles {
     if (-not (Test-Path $PrintersPath)) {
         if (Test-Path $PrintersExample) {
             Copy-Item $PrintersExample $PrintersPath
-            Write-Host "  Created printers.json — EDIT Domino IP before go-live"
+            Write-Host "  Created printers.json - EDIT Domino IP before go-live"
         } elseif (Test-Path $PrintersDemo) {
             Copy-Item $PrintersDemo $PrintersPath
             Write-Host "  Created printers.json from demo (127.0.0.1)"
@@ -197,7 +198,7 @@ function Ensure-CloudflaredBinary {
 
     Write-Step "Installing cloudflared"
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        Write-Warning "winget not found — cannot install cloudflared automatically"
+        Write-Warning "winget not found - cannot install cloudflared automatically"
         return $null
     }
     winget install -e --id Cloudflare.cloudflared --accept-package-agreements --accept-source-agreements --disable-interactivity
@@ -218,9 +219,9 @@ function Get-TunnelIdFromList([string]$Cloudflared, [string]$TunnelName) {
 }
 
 function Ensure-DominoTunnelConfig([hashtable]$Settings, [string]$Cloudflared) {
-    $hostname = if ($Settings.PUBLIC_HOSTNAME) { $Settings.PUBLIC_HOSTNAME } else { "domino-print.k95foods.com" }
-    $port = if ($Settings.PORT) { $Settings.PORT } else { "5003" }
-    $tunnelName = if ($Settings.TUNNEL_NAME) { $Settings.TUNNEL_NAME } else { "domino-print" }
+    $hostname = if ($Settings.ContainsKey("PUBLIC_HOSTNAME") -and $Settings["PUBLIC_HOSTNAME"]) { $Settings["PUBLIC_HOSTNAME"] } else { "domino-print.k95foods.com" }
+    $port = if ($Settings.ContainsKey("PORT") -and $Settings["PORT"]) { $Settings["PORT"] } else { "5003" }
+    $tunnelName = if ($Settings.ContainsKey("TUNNEL_NAME") -and $Settings["TUNNEL_NAME"]) { $Settings["TUNNEL_NAME"] } else { "domino-print" }
     $cloudDir = Join-Path $HOME ".cloudflared"
     $configPath = Join-Path $cloudDir "config-domino.yml"
     $certPath = Join-Path $cloudDir "cert.pem"
@@ -280,8 +281,8 @@ ingress:
 
 function Install-MiddlewareService([hashtable]$Settings, [string]$Nssm) {
     Write-Step "Installing Windows service: $ServiceName"
-    $port = if ($Settings.PORT) { $Settings.PORT } else { "5003" }
-    $hostAddr = if ($Settings.HOST) { $Settings.HOST } else { "0.0.0.0" }
+    $port = if ($Settings.ContainsKey("PORT") -and $Settings["PORT"]) { $Settings["PORT"] } else { "5003" }
+    $hostAddr = if ($Settings.ContainsKey("HOST") -and $Settings["HOST"]) { $Settings["HOST"] } else { "0.0.0.0" }
 
     Stop-PortListeners ([int]$port)
 
@@ -310,8 +311,10 @@ function Install-MiddlewareService([hashtable]$Settings, [string]$Nssm) {
         "HOST=$hostAddr",
         "PORT=$port"
     )
-    if ($Settings.API_KEY) { $envExtra += "API_KEY=$($Settings.API_KEY)" }
-    if ($Settings.DOMINO_FIXED_ACK_MODE) { $envExtra += "DOMINO_FIXED_ACK_MODE=$($Settings.DOMINO_FIXED_ACK_MODE)" }
+    if ($Settings.ContainsKey("API_KEY") -and $Settings["API_KEY"]) { $envExtra += "API_KEY=$($Settings['API_KEY'])" }
+    if ($Settings.ContainsKey("DOMINO_FIXED_ACK_MODE") -and $Settings["DOMINO_FIXED_ACK_MODE"]) {
+        $envExtra += "DOMINO_FIXED_ACK_MODE=$($Settings['DOMINO_FIXED_ACK_MODE'])"
+    }
     & $Nssm set $ServiceName AppEnvironmentExtra ($envExtra -join "`n")
 
     sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/5000/restart/5000 | Out-Null
@@ -343,14 +346,14 @@ function Install-CloudflaredTunnel([hashtable]$Settings, [string]$Nssm) {
     Write-Step "Cloudflare public URL (one-click)"
     $cf = Ensure-CloudflaredBinary
     if (-not $cf) {
-        Write-Warning "cloudflared not available — middleware still installed for LAN use"
+        Write-Warning "cloudflared not available - middleware still installed for LAN use"
         return $null
     }
     Write-Host "  cloudflared: $cf"
 
     $info = Ensure-DominoTunnelConfig $Settings $cf
     if (-not $info) {
-        Write-Warning "Cloudflare tunnel not configured — middleware still installed for LAN use"
+        Write-Warning "Cloudflare tunnel not configured - middleware still installed for LAN use"
         return $null
     }
 
@@ -410,7 +413,7 @@ Start-Transcript -Path $InstallLog -Append | Out-Null
 try {
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Green
-Write-Host "  Domino Printer Middleware — One-Click Install" -ForegroundColor Green
+Write-Host "  Domino Printer Middleware - One-Click Install" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host "  Root: $RootDir"
 Write-Host "  Cloudflare: $(if ($EnableCloudflare) { 'ON (default)' } else { 'OFF (-SkipCloudflare)' })"
@@ -434,7 +437,7 @@ if ($EnableCloudflare) {
     Write-Host "  Cloudflare skipped (LAN mode)." -ForegroundColor Yellow
 }
 
-$port = if ($settings.PORT) { $settings.PORT } else { "5003" }
+$port = if ($settings.ContainsKey("PORT") -and $settings["PORT"]) { $settings["PORT"] } else { "5003" }
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host "  Install complete" -ForegroundColor Green
@@ -445,7 +448,7 @@ if ($publicHost) {
     Write-Host "  Cloudflare:  $CloudflaredService  (auto-start + auto-restart)"
     Write-Host "  Public:      https://$publicHost/health"
 } else {
-    Write-Host "  Public:      (not configured — rerun install.bat after cloudflared tunnel login)"
+    Write-Host "  Public:      (not configured - rerun install.bat after cloudflared tunnel login)"
 }
 Write-Host ""
 Write-Host "  NEXT: edit config\printers.json with real Domino IP (port 7000)"
