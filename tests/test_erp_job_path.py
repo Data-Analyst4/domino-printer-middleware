@@ -121,6 +121,12 @@ class ErpJobPathServiceTests(unittest.TestCase):
         self.assertEqual(resume["steps"][0]["hex"], "1B51315904")
         self.assertTrue(self.fake.state.head_enabled)
 
+    def test_get_print_count_t1_t2(self):
+        body = self._print({"action": "get_print_count"})
+        self.assertTrue(body["success"], body)
+        self.assertEqual(body["t1"], 304641327)
+        self.assertEqual(body["t2"], 138)
+
     def test_erp_path_never_sends_print_go(self):
         self._print({"action": "put_named_label_online", "label_name": LABEL_NAME})
         self._print({"action": "query_online_label"})
@@ -179,6 +185,13 @@ class ErpHttpSmokeTests(unittest.TestCase):
         self.assertEqual(status.status_code, 200, status.get_json())
         self.assertTrue(identify.get_json()["success"])
         self.assertTrue(status.get_json()["success"])
+
+        seq = self._print({"action": "sequence_on"})
+        self.assertEqual(seq.status_code, 200, seq.get_json())
+        self.assertTrue(seq.get_json()["success"])
+        resume = self._print({"action": "soft_resume"})
+        self.assertEqual(resume.status_code, 200, resume.get_json())
+        self.assertTrue(resume.get_json()["success"])
 
         online = self._print({"action": "put_named_label_online", "label_name": LABEL_NAME})
         self.assertEqual(online.status_code, 200, online.get_json())

@@ -42,6 +42,21 @@ class CodenetTests(unittest.TestCase):
         self.assertFalse(codenet.is_print_go_packet(codenet.soft_stop()))
         self.assertFalse(codenet.is_print_go_packet(codenet.soft_resume()))
 
+    def test_sequence_on_off_match_probe(self):
+        self.assertEqual(codenet.sequence_on().hex().upper(), "1B4F533104")
+        self.assertEqual(codenet.sequence_off().hex().upper(), "1B4F533004")
+        self.assertEqual(codenet.query_sequence().hex().upper(), "1B4F533F04")
+        self.assertFalse(codenet.is_print_go_packet(codenet.sequence_on()))
+
+    def test_product_count_query_and_parse(self):
+        self.assertEqual(codenet.query_product_count(1).hex().upper(), "1B54313F04")
+        self.assertEqual(codenet.query_product_count(2).hex().upper(), "1B54323F04")
+        # Live Ax style: T1 + 10-digit value
+        inner = b"T10304641327".hex().upper()
+        self.assertEqual(codenet.parse_product_count(inner, counter_id=1), 304641327)
+        inner2 = b"T20000000138".hex().upper()
+        self.assertEqual(codenet.parse_product_count(inner2, counter_id=2), 138)
+
     def test_fifo_oe_no_print_go(self):
         packet = codenet.send_fifo_data("95.00,KFBNIKHIL7,11/08/2026,10/05/2027")
         self.assertTrue(packet.hex().upper().startswith("1B4F45"))

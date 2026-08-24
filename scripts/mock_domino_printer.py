@@ -129,6 +129,13 @@ def build_response(
             flag = b"Y" if state.head_enabled else b"N"
             return _frame(b"Q1" + flag), f"head query -> Q1{flag.decode()}"
 
+        # T1? / T2? — product / print counters (T2 = prints since power-on)
+        if cmd in {b"T1", b"T2"}:
+            cid = 1 if cmd == b"T1" else 2
+            value = 304641327 if cid == 1 else 138
+            payload = f"T{cid}{value:010d}".encode("ascii")
+            return _frame(payload), f"query_product_count T{cid} -> {value}"
+
         # Generic query echo (success-shaped)
         return _frame(cmd + b"OK"), f"query {cmd!r} -> OK stub"
 
@@ -222,6 +229,13 @@ def build_response(
         with state.lock:
             state.head_enabled = body.endswith(b"Y")
         return _ack(fixed_ack), f"head {'enable' if body.endswith(b'Y') else 'disable'} -> ACK"
+
+    # OS 0 / OS 1 / OS ? — jet sequence off / on / query (UI Start / Sequence off)
+    if body in {b"OS0", b"OS1"}:
+        return _ack(fixed_ack), f"sequence {'on' if body.endswith(b'1') else 'off'} -> ACK"
+    if body == b"OS?":
+        # Minimal query echo: OS + state digit 1 (Ready)
+        return bytes([ESC]) + b"OS1" + bytes([EOT]), "query_sequence -> OS1"
 
     # Unknown command — ACK by default so exploratory demos stay green
     if fail_unknown:

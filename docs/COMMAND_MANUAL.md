@@ -70,6 +70,11 @@ Photocell / factory job path (**does not send Print Go `N`**):
 | `push_fifo_fields` | `fields[]` or `csv` | FIFO data (`OE`). Alias: `send_fifo_data` + `data` |
 | `soft_stop` | — | Head disable (`Q1N`) — pause prints |
 | `soft_resume` | — | Head enable (`Q1Y`) — allow prints again |
+| `sequence_on` | — | Jet **Sequence ON** / UI Start (`OS 1`) — Ready to print |
+| `sequence_off` | — | Jet **Sequence OFF** (`OS 0`) — Standby (admin / end-of-job) |
+| `query_sequence` | — | Query sequence state (`OS ?`) |
+| `get_print_count` | — | Read **T1** (photocell) + **T2** (prints since power-on) |
+| `query_product_count` | optional `counter_id` 1\|2 | Single counter query (`T1?` / `T2?`) |
 | `identify` | — | Printer identity (`A?`) |
 | `get_status` | — | Extended status (`O1?`) |
 
@@ -361,7 +366,8 @@ ON (label_name=NOICE KM 200ML) → OE (fields in POD order) → photocell
 - Official `P` format includes head select: `ESC P 1 <slot 001–255> EOT` (e.g. slot 009 → `1B503130303904`). Our builder currently sends `ESC P <slot>` without the `1` head byte — verify on real hardware if ACK fails.
 - `OE` length is ASCII `0001`–`1024`; label must already contain updatable text fields (Domino’s POD equivalent).
 - Unicode variable data uses Ethernet data port **16000**, not Codenet `OE`.
-- Do **not** expose jet sequence (`OS`), clear-all (`R`), or raw hex to normal ERP operators.
+- ERP photocell path uses **`sequence_on` (`OS 1`)** at demo start (UI Start). Prefer that over raw hex.
+- Do **not** expose clear-all (`R`) or raw hex to normal ERP operators. Use `sequence_off` only when intentionally stopping the jet.
 
 ### Recommended build order (match Rynan usefulness)
 

@@ -104,6 +104,51 @@ def soft_resume() -> bytes:
     return _frame(b"Q", b"1", b"Y")
 
 
+def sequence_on() -> bytes:
+    """Sequence ink jet on (UI Start / Ready): ESC OS 1 EOT."""
+    return _frame(b"OS", b"1")
+
+
+def sequence_off() -> bytes:
+    """Sequence ink jet off (UI Sequence off / Standby): ESC OS 0 EOT."""
+    return _frame(b"OS", b"0")
+
+
+def query_sequence() -> bytes:
+    """Query jet sequence + status: ESC OS ? EOT."""
+    return _frame(b"OS", bytes([QUERY]))
+
+
+def query_product_count(counter_id: int = 2) -> bytes:
+    """Product / print counter query: ESC T <id> ? EOT (T1 photocell, T2 prints)."""
+    cid = int(counter_id)
+    if cid not in (1, 2):
+        raise ValueError("counter_id must be 1 (photocell) or 2 (prints since power-on)")
+    return _frame(b"T", str(cid).encode("ascii"), bytes([QUERY]))
+
+
+def parse_product_count(query_payload_hex: Optional[str], *, counter_id: Optional[int] = None) -> Optional[int]:
+    """
+    Parse T-counter query reply.
+    Live Ax example ASCII: T10304641327 → counter 1 value 304641327 (10 digits).
+    """
+    ascii_payload = query_payload_ascii(query_payload_hex)
+    if not ascii_payload:
+        return None
+    text = ascii_payload.strip()
+    if text.startswith("T") and len(text) >= 2 and text[1].isdigit():
+        digits = "".join(ch for ch in text[2:] if ch.isdigit())
+        if digits:
+            return int(digits)
+    # Fallback: last 10 digits anywhere
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if len(digits) >= 10:
+        return int(digits[-10:])
+    if digits:
+        return int(digits)
+    return None
+
+
 def print_go(product_detect: str = "1") -> bytes:
     detect = str(product_detect).strip() or "1"
     if len(detect) != 1 or not detect.isdigit():
@@ -212,4 +257,8 @@ COMMAND_BUILDERS = {
     "store_label": lambda **kw: store_label(kw["label_slot"], kw["label_data"]),
     "soft_stop": lambda **_: soft_stop(),
     "soft_resume": lambda **_: soft_resume(),
+    "sequence_on": lambda **_: sequence_on(),
+    "sequence_off": lambda **_: sequence_off(),
+    "query_sequence": lambda **_: query_sequence(),
+    "query_product_count": lambda **kw: query_product_count(int(kw.get("counter_id", 2))),
 }

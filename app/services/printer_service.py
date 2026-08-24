@@ -190,6 +190,8 @@ class DominoPrintService:
             return self._print_stored_label(cfg, params)
         if action == "print_product":
             return self._print_product(cfg, params)
+        if action == "get_print_count":
+            return self._get_print_count(cfg, params)
 
         builder = codenet.COMMAND_BUILDERS.get(action)
         if not builder:
@@ -273,7 +275,46 @@ class DominoPrintService:
             return {"label_slot": params["label_slot"], "label_data": str(params["label_data"])}
         if action in {"send_fifo_data", "push_fifo_fields"}:
             return {"data": self._fifo_csv(params)}
+        if action == "query_product_count":
+            raw = params.get("counter_id", params.get("counter", 2))
+            try:
+                cid = int(raw)
+            except (TypeError, ValueError):
+                cid = 2
+            if cid not in (1, 2):
+                raise ValueError("counter_id must be 1 or 2")
+            return {"counter_id": cid}
         return {}
+
+    def _get_print_count(self, cfg: PrinterConfig, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Read T1 (photocell) and T2 (prints since power-on) for ERP printed = T2_after − T2_before."""
+        steps: List[Dict[str, Any]] = []
+        lock = self._locks.setdefault(cfg.printer_id, threading.Lock())
+        with lock:
+            for cid, name in ((1, "t1_photocell"), (2, "t2_prints")):
+                packet = codenet.query_product_count(cid)
+                step = self._send_step(cfg, f"query_product_count_{cid}", packet)
+                count = None
+                if step.get("ok"):
+                    count = codenet.parse_product_count(step.get("query_payload_hex"), counter_id=cid)
+                step["counter_id"] = cid
+                step["counter_name"] = name
+                step["count"] = count
+                steps.append(step)
+
+        t1 = steps[0].get("count") if len(steps) > 0 else None
+        t2 = steps[1].get("count") if len(steps) > 1 else None
+        ok = all(s.get("ok") for s in steps) and t2 is not None
+        return {
+            "success": ok,
+            "steps": steps,
+            "t1": t1,
+            "t2": t2,
+            "t1_photocell": t1,
+            "t2_prints": t2,
+            "error": None if ok else (steps[-1].get("error") if steps else "Failed to read print counters"),
+            "nak_code": None if ok else (steps[-1].get("nak_code") if steps else None),
+        }
 
     @staticmethod
     def _fifo_csv(params: Dict[str, Any]) -> str:
@@ -300,6 +341,14 @@ class DominoPrintService:
             ascii_payload = codenet.query_payload_ascii(step.get("query_payload_hex"))
             extras["query_payload_ascii"] = ascii_payload
             extras["online_label"] = codenet.online_label_from_query_ascii(ascii_payload)
+        if action == "query_product_count":
+            ascii_payload = codenet.query_payload_ascii(step.get("query_payload_hex"))
+            extras["query_payload_ascii"] = ascii_payload
+            extras["counter_id"] = kwargs.get("counter_id", 2)
+            extras["count"] = codenet.parse_product_count(
+                step.get("query_payload_hex"),
+                counter_id=kwargs.get("counter_id"),
+            )
         return extras
 
     def _send_step(self, cfg: PrinterConfig, command: str, packet: bytes) -> Dict[str, Any]:
