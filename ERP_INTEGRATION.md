@@ -215,13 +215,44 @@ Do **not** expect Domino responses like `DATA;YES` or `{"status":"YES"}`.
 | ERP event | Rynan today | Domino |
 |-----------|-------------|--------|
 | Start job / select template | `STAR` + `templatename` | Ensure label exists on Domino; use `label_slot` or `print_product` |
-| Send variable data | `DATA` + POD fields | Later: `send_fifo_data` / download label (phase 2) |
-| Trigger print | Often part of DATA / photocell | `print_stored_label` → middleware sends `P` then `N` |
+| Send variable data | `DATA` + POD fields | `send_fifo_data` / `push_fifo_fields` (`OE`) |
+| Optional camera import | `camera_import` on `DATA` | Same `camera_import` block on FIFO actions only |
+| Trigger print | Often part of DATA / photocell | Photocell or `print_go` after OE |
 | Health check | `GET /health` on Rynan URL | `GET /health` on **Domino URL** |
 
 **Phase 1 (ship this first):** ERP only calls `print_stored_label` or `print_product`. Labels are designed/stored on the Domino printer UI.
 
-**Phase 2 (optional):** ERP sends batch/MRP/expiry via `send_fifo_data` or dynamic label download.
+**Phase 2:** ERP sends batch/MRP/expiry via `send_fifo_data`. Optional camera:
+
+### Plain FIFO (no camera)
+
+```json
+{
+  "printer_id": "DOMINO_AX_1",
+  "action": "send_fifo_data",
+  "data": "95.00,BATCH,11/08/2026,10/05/2027"
+}
+```
+
+### FIFO + camera (same contract as Rynan)
+
+```json
+{
+  "printer_id": "DOMINO_AX_1",
+  "action": "send_fifo_data",
+  "data": "95.00,BATCH,11/08/2026,10/05/2027",
+  "camera_import": {
+    "enabled": true,
+    "barcode": "8906164010577",
+    "url": "http://192.168.0.68:5001/api/import_batch"
+  }
+}
+```
+
+- Camera POST happens **before** Domino `OE`.
+- `text` = FIFO CSV; body is `{ "barcode", "text" }`.
+- Print `success` is Domino-only. Use `camera_import.erp_alert_recommended` / `alert_reasons` for WhatsApp.
+- Omit `camera_import` or set `enabled: false` when camera should not receive data.
 
 ---
 

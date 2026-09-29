@@ -10,6 +10,11 @@ from typing import Any, Deque, Dict, List, Optional
 
 from app.core.config import PrinterConfig, Settings, load_printers_config
 from app.services import codenet
+from app.services.camera_import_forwarder import (
+    CAMERA_FIFO_ACTIONS,
+    forward_camera_import_immediate,
+    resolve_camera_target,
+)
 from app.services.connection import DominoConnection
 from app.services.connection_test import ping_host, run_connection_test, tcp_port_open
 from app.utils.logger import log
@@ -112,6 +117,26 @@ class DominoPrintService:
 
         job_id = str(uuid.uuid4())
         started = datetime.utcnow().isoformat() + "Z"
+
+        # Optional camera: only for FIFO OE actions, before Domino send (Rynan-compatible).
+        camera_import_meta = None
+        if action in CAMERA_FIFO_ACTIONS:
+            cam_url, _cam_barcode = resolve_camera_target(payload)
+            if cam_url is not None:
+                params = dict(payload)
+                if isinstance(payload.get("command"), dict):
+                    params.update(payload["command"])
+                try:
+                    fifo_text = self._fifo_csv(params)
+                except ValueError:
+                    fifo_text = ""
+                camera_import_meta = forward_camera_import_immediate(
+                    job_id,
+                    payload,
+                    fifo_text,
+                    printer_id=printer_id,
+                )
+
         try:
             result = self._run_action(cfg, action, payload)
             result.update(
@@ -147,6 +172,9 @@ class DominoPrintService:
                 "started_at": started,
                 "finished_at": datetime.utcnow().isoformat() + "Z",
             }
+
+        if camera_import_meta is not None:
+            result["camera_import"] = camera_import_meta
 
         self._store_job(result)
         return result

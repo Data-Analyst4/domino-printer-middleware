@@ -76,6 +76,27 @@ Or map ERP product codes via `label_map` in `config/printers.json`:
 }
 ```
 
+## Camera import (optional, same as Rynan)
+
+Only for `send_fifo_data` / `push_fifo_fields`. Omit `camera_import` for plain FIFO (no camera call).
+
+```json
+{
+  "printer_id": "DOMINO_AX_1",
+  "action": "send_fifo_data",
+  "data": "95.00,BATCH,11/08/2026,10/05/2027",
+  "camera_import": {
+    "enabled": true,
+    "barcode": "8906164010577",
+    "url": "http://192.168.0.68:5001/api/import_batch"
+  }
+}
+```
+
+- POSTs `{ "barcode", "text" }` to the camera URL **before** Domino `OE` (`text` = FIFO CSV).
+- Print `success` is Domino-only; check `camera_import.erp_alert_recommended` for WhatsApp.
+- Env defaults: `CAMERA_IMPORT_ENABLED`, `CAMERA_IMPORT_BATCH_URL`, `CAMERA_IMPORT_TIMEOUT` (see `config/site.env.example`).
+
 ## ERP changes
 
 See **[ERP_INTEGRATION.md](ERP_INTEGRATION.md)** for ERP printer configuration and API calls.
